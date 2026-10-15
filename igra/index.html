@@ -1,0 +1,1996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2D Top-Down City Drift: Hot Pursuit & Delivery</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #07080c;
+      color: #ffffff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+    }
+
+    #game-container {
+      position: relative;
+      width: 1280px;
+      height: 820px;
+      min-width: 720px;
+      min-height: 480px;
+      max-width: 100vw;
+      max-height: 100vh;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95), 0 0 30px rgba(0, 210, 211, 0.15);
+      border: 2px solid #2f3542;
+      border-radius: 8px;
+      background-color: #181820;
+      overflow: hidden;
+      resize: both;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Left HUD: Telemetry, Damage & Career */
+    #hud-left {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      pointer-events: none;
+      background: rgba(12, 14, 22, 0.86);
+      padding: 14px 18px;
+      border-radius: 8px;
+      border-left: 4px solid #00d2d3;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(5px);
+      min-width: 245px;
+    }
+
+    /* Top-Center HUD: Active Delivery Mission */
+    #hud-center {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+      background: rgba(12, 14, 22, 0.86);
+      padding: 10px 28px;
+      border-radius: 8px;
+      border-bottom: 3px solid #00f2fe;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(5px);
+      text-align: center;
+      min-width: 290px;
+    }
+
+    /* Right HUD: Police Heat & Screen Size Controls */
+    #hud-right {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: rgba(12, 14, 22, 0.86);
+      padding: 14px 18px;
+      border-radius: 8px;
+      border-right: 4px solid #ff4757;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(5px);
+      min-width: 255px;
+      z-index: 15;
+    }
+
+    /* Translucent Center-Screen Arrest Slider (High visibility, zero road obstruction) */
+    #center-arrest-hud {
+      position: absolute;
+      top: 26%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      width: 380px;
+      padding: 12px 22px;
+      border-radius: 12px;
+      background: rgba(15, 15, 24, 0.42);
+      border: 1.5px solid rgba(255, 71, 87, 0.65);
+      box-shadow: 0 0 30px rgba(255, 71, 87, 0.25);
+      backdrop-filter: blur(2px);
+      z-index: 25;
+      animation: arrestPulse 0.45s infinite alternate;
+    }
+
+    @keyframes arrestPulse {
+      from { border-color: rgba(255, 71, 87, 0.55); box-shadow: 0 0 18px rgba(255, 71, 87, 0.25); }
+      to   { border-color: rgba(0, 180, 255, 0.85); box-shadow: 0 0 28px rgba(0, 180, 255, 0.45); }
+    }
+
+    .arrest-title {
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 2.5px;
+      color: #ffffff;
+      text-shadow: 0 0 10px #ff4757, 0 2px 4px #000;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .arrest-slider-track {
+      width: 100%;
+      height: 14px;
+      background: rgba(10, 12, 18, 0.65);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .arrest-slider-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #ffa502 0%, #ff4757 65%, #ff0040 100%);
+      box-shadow: 0 0 16px rgba(255, 71, 87, 0.9);
+      transition: width 0.06s linear;
+    }
+
+    /* Screen Size Control Buttons inside Right HUD */
+    .screen-size-row {
+      display: flex;
+      gap: 5px;
+      margin-top: 6px;
+    }
+
+    .size-btn {
+      flex: 1;
+      background: #1e222d;
+      color: #ced6e0;
+      border: 1px solid #3d4454;
+      border-radius: 4px;
+      padding: 4px 0;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .size-btn:hover {
+      border-color: #00d2d3;
+      color: #ffffff;
+    }
+
+    .size-btn.active {
+      background: rgba(0, 210, 211, 0.22);
+      border-color: #00d2d3;
+      color: #00f2fe;
+    }
+
+    /* Bottom Garage Bar: Selectable Player Cars 1-4 */
+    #garage-bar {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      background: rgba(12, 14, 22, 0.9);
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid #2f3542;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+      z-index: 15;
+    }
+
+    .car-btn {
+      background: #1e222d;
+      color: #a4b0be;
+      border: 2px solid #2f3542;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .car-btn:hover {
+      border-color: #00d2d3;
+      color: #ffffff;
+    }
+
+    .car-btn.active {
+      background: rgba(0, 210, 211, 0.18);
+      border-color: #00d2d3;
+      color: #00f2fe;
+      box-shadow: 0 0 12px rgba(0, 210, 211, 0.35);
+    }
+
+    .mission-label {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #00f2fe;
+      margin-bottom: 2px;
+    }
+
+    .timer-display {
+      font-size: 26px;
+      font-weight: 900;
+      font-family: monospace;
+      color: #ffffff;
+    }
+
+    .hud-stat {
+      font-size: 15px;
+      font-weight: bold;
+      margin-bottom: 5px;
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .hud-divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.12);
+      margin: 8px 0;
+    }
+
+    .bar-bg {
+      width: 100%;
+      height: 9px;
+      background: #222634;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-top: 4px;
+      margin-bottom: 8px;
+    }
+
+    .bar-fill {
+      height: 100%;
+      width: 100%;
+      transition: width 0.15s ease;
+    }
+
+    /* BUSTED / WRECKED Overlay */
+    #game-over-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(8, 10, 16, 0.85);
+      backdrop-filter: blur(6px);
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 50;
+    }
+
+    .overlay-title {
+      font-size: 72px;
+      font-weight: 900;
+      letter-spacing: 6px;
+      color: #ff4757;
+      text-shadow: 0 0 30px rgba(255, 71, 87, 0.8);
+      margin-bottom: 8px;
+    }
+
+    .overlay-sub {
+      font-size: 20px;
+      color: #ced6e0;
+      margin-bottom: 28px;
+    }
+
+    .restart-btn {
+      background: linear-gradient(135deg, #ff4757, #ff6b81);
+      color: #ffffff;
+      border: none;
+      padding: 14px 36px;
+      font-size: 18px;
+      font-weight: 800;
+      border-radius: 8px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      box-shadow: 0 8px 25px rgba(255, 71, 87, 0.5);
+    }
+
+    .restart-btn:hover {
+      transform: scale(1.04);
+    }
+
+    /* Corner Resize Hint */
+    #resize-hint {
+      position: absolute;
+      bottom: 4px;
+      right: 10px;
+      font-size: 10px;
+      color: #747d8c;
+      pointer-events: none;
+      z-index: 15;
+    }
+
+    .highlight { color: #ff9f43; }
+    .cash-color { color: #1dd1a1; }
+    .hi-color { color: #feca57; }
+    .heat-color { color: #ff4757; }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="gameCanvas" width="1280" height="820"></canvas>
+
+  <!-- Left HUD -->
+  <div id="hud-left">
+    <div class="hud-stat"><span>SPEED:</span> <span class="highlight"><span id="speedDisplay">0</span> km/h</span></div>
+    <div class="hud-stat"><span>DRIFT SCORE:</span> <span id="scoreDisplay" class="highlight">0</span></div>
+    <div class="hud-stat" style="color:#ff6b6b; font-size:13px;"><span>MULTIPLIER:</span> <span id="multiplierDisplay">1.0x</span></div>
+
+    <div style="font-size:12px; font-weight:bold; color:#a4b0be; margin-top:6px;">VEHICLE INTEGRITY</div>
+    <div class="bar-bg"><div id="healthBar" class="bar-fill" style="background:#1dd1a1; width:100%;"></div></div>
+
+    <div class="hud-divider"></div>
+    <div class="hud-stat"><span>CASH:</span> <span class="cash-color">$<span id="cashDisplay">0</span></span></div>
+    <div class="hud-stat"><span>JOBS DONE:</span> <span id="jobsDisplay">0</span></div>
+    <div class="hud-stat"><span>HIGH SCORE:</span> <span id="highScoreDisplay" class="hi-color">0</span></div>
+  </div>
+
+  <!-- Top-Center HUD -->
+  <div id="hud-center">
+    <div class="mission-label" id="missionStatusText">PICKUP PACKAGE (CYAN ZONE)</div>
+    <div class="timer-display" id="timerDisplay">45.0s</div>
+  </div>
+
+  <!-- Translucent Center-Screen Arrest Slider -->
+  <div id="center-arrest-hud">
+    <div class="arrest-title">
+      <span>🚨 ARREST IN PROGRESS</span>
+      <span id="arrestTimeText">0.0 / 3.2s</span>
+    </div>
+    <div class="arrest-slider-track">
+      <div id="bustedBar" class="arrest-slider-fill"></div>
+    </div>
+  </div>
+
+  <!-- Right HUD: Heat, Threat Tier & Adjustable Screen Size -->
+  <div id="hud-right">
+    <div class="hud-stat"><span>HEAT LEVEL:</span> <span id="heatText" class="heat-color">LVL 0</span></div>
+    <div class="bar-bg"><div id="heatBar" class="bar-fill" style="background:linear-gradient(90deg, #ff9f43, #ff4757); width:0%;"></div></div>
+    <div class="hud-stat" style="font-size:13px;"><span>ACTIVE UNITS:</span> <span id="policeCountDisplay">0</span></div>
+    <div class="hud-stat" style="font-size:12px; color:#a4b0be;"><span>PURSUIT STATUS:</span> <span id="threatTierDisplay" style="color:#feca57;">STANDBY</span></div>
+
+    <div class="hud-divider"></div>
+    <div style="font-size:11px; font-weight:bold; color:#a4b0be; display:flex; justify-content:space-between;">
+      <span>SCREEN SIZE</span>
+      <span id="resolutionLabel" style="color:#00d2d3;">1280×820</span>
+    </div>
+    <div class="screen-size-row">
+      <button class="size-btn" onclick="setScreenSize('small', this)">Compact</button>
+      <button class="size-btn active" onclick="setScreenSize('medium', this)">Default</button>
+      <button class="size-btn" onclick="setScreenSize('large', this)">Wide</button>
+      <button class="size-btn" onclick="setScreenSize('full', this)">Max Fit</button>
+    </div>
+    <input type="range" id="screenScaleSlider" min="60" max="100" value="85"
+      style="width:100%; margin-top:7px; accent-color:#00d2d3; cursor:pointer;"
+      title="Slide to adjust screen size">
+  </div>
+
+  <!-- Bottom Car Selector (1-4) -->
+  <div id="garage-bar">
+    <button class="car-btn active" onclick="selectPlayerCar(0)" id="carBtn0">[1] CAR 1 (BALANCED)</button>
+    <button class="car-btn" onclick="selectPlayerCar(1)" id="carBtn1">[2] CAR 2 (DRIFT SPEC)</button>
+    <button class="car-btn" onclick="selectPlayerCar(2)" id="carBtn2">[3] CAR 3 (STREET GT)</button>
+    <button class="car-btn" onclick="selectPlayerCar(3)" id="carBtn3">[4] CAR 4 (INTERCEPTOR)</button>
+  </div>
+
+  <div id="resize-hint">Drag bottom-right corner or use slider to resize</div>
+
+  <!-- BUSTED / WRECKED End Screen -->
+  <div id="game-over-overlay">
+    <div class="overlay-title" id="overlayTitle">BUSTED</div>
+    <div class="overlay-sub" id="overlaySub">The police boxed you in!</div>
+    <button class="restart-btn" onclick="resetRun()">BACK ON THE STREETS (ENTER / SPACE)</button>
+  </div>
+</div>
+
+<script>
+  const gameContainer = document.getElementById('game-container');
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const resolutionLabel = document.getElementById('resolutionLabel');
+  const screenScaleSlider = document.getElementById('screenScaleSlider');
+
+  // ==========================================
+  // 0. DYNAMIC SCREEN SIZE & RESIZE SYSTEM
+  // ==========================================
+  function syncCanvasResolution() {
+    const rect = gameContainer.getBoundingClientRect();
+    const newW = Math.round(rect.width);
+    const newH = Math.round(rect.height);
+    if (newW > 200 && newH > 200 && (canvas.width !== newW || canvas.height !== newH)) {
+      canvas.width = newW;
+      canvas.height = newH;
+      resolutionLabel.textContent = `${newW}×${newH}`;
+    }
+  }
+
+  const resizeObserver = new ResizeObserver(() => {
+    syncCanvasResolution();
+  });
+  resizeObserver.observe(gameContainer);
+
+  window.setScreenSize = function(mode, btnEl) {
+    document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
+
+    if (mode === 'small') {
+      gameContainer.style.width = '960px';
+      gameContainer.style.height = '640px';
+      screenScaleSlider.value = 68;
+    } else if (mode === 'medium') {
+      gameContainer.style.width = '1280px';
+      gameContainer.style.height = '820px';
+      screenScaleSlider.value = 85;
+    } else if (mode === 'large') {
+      gameContainer.style.width = '1540px';
+      gameContainer.style.height = '920px';
+      screenScaleSlider.value = 94;
+    } else if (mode === 'full') {
+      gameContainer.style.width = '98vw';
+      gameContainer.style.height = '96vh';
+      screenScaleSlider.value = 100;
+    }
+    syncCanvasResolution();
+  };
+
+  screenScaleSlider.addEventListener('input', (e) => {
+    document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+    const pct = parseInt(e.target.value, 10);
+    gameContainer.style.width = `${Math.round((window.innerWidth * pct) / 100)}px`;
+    gameContainer.style.height = `${Math.round((window.innerHeight * pct) / 100)}px`;
+    syncCanvasResolution();
+  });
+
+  // ==========================================
+  // 1. EXPANDED 7500x7500 CITY WORLD
+  // ==========================================
+  const WORLD_WIDTH = 7500;
+  const WORLD_HEIGHT = 7500;
+  const NUM_BLOCKS = 6;
+  const BLOCK_SIZE = 700;
+  const ROAD_WIDTH = (WORLD_WIDTH - NUM_BLOCKS * BLOCK_SIZE) / (NUM_BLOCKS + 1);
+
+  const skidCanvas = document.createElement('canvas');
+  skidCanvas.width = WORLD_WIDTH;
+  skidCanvas.height = WORLD_HEIGHT;
+  const skidCtx = skidCanvas.getContext('2d');
+
+  // HUD References
+  const speedDisplay = document.getElementById('speedDisplay');
+  const scoreDisplay = document.getElementById('scoreDisplay');
+  const multiplierDisplay = document.getElementById('multiplierDisplay');
+  const healthBar = document.getElementById('healthBar');
+  const cashDisplay = document.getElementById('cashDisplay');
+  const jobsDisplay = document.getElementById('jobsDisplay');
+  const highScoreDisplay = document.getElementById('highScoreDisplay');
+  const missionStatusText = document.getElementById('missionStatusText');
+  const timerDisplay = document.getElementById('timerDisplay');
+  const hudCenter = document.getElementById('hud-center');
+  const heatText = document.getElementById('heatText');
+  const heatBar = document.getElementById('heatBar');
+  const policeCountDisplay = document.getElementById('policeCountDisplay');
+  const threatTierDisplay = document.getElementById('threatTierDisplay');
+  const centerArrestHud = document.getElementById('center-arrest-hud');
+  const arrestTimeText = document.getElementById('arrestTimeText');
+  const bustedBar = document.getElementById('bustedBar');
+  const gameOverOverlay = document.getElementById('game-over-overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlaySub = document.getElementById('overlaySub');
+
+  // ==========================================
+  // 2. LOCAL STORAGE PERSISTENCE
+  // ==========================================
+  const STORAGE_KEYS = {
+    cash: 'cityDrift_cash_v2',
+    jobs: 'cityDrift_jobs_v2',
+    highScore: 'cityDrift_highScore_v2'
+  };
+
+  const career = {
+    cash: parseInt(localStorage.getItem(STORAGE_KEYS.cash), 10) || 0,
+    jobs: parseInt(localStorage.getItem(STORAGE_KEYS.jobs), 10) || 0,
+    highScore: parseInt(localStorage.getItem(STORAGE_KEYS.highScore), 10) || 0
+  };
+
+  function saveCareerStats() {
+    try {
+      localStorage.setItem(STORAGE_KEYS.cash, career.cash);
+      localStorage.setItem(STORAGE_KEYS.jobs, career.jobs);
+      localStorage.setItem(STORAGE_KEYS.highScore, career.highScore);
+    } catch (e) {}
+  }
+
+  function updateCareerHUD() {
+    cashDisplay.textContent = career.cash.toLocaleString();
+    jobsDisplay.textContent = career.jobs;
+    highScoreDisplay.textContent = career.highScore.toLocaleString();
+  }
+  updateCareerHUD();
+
+  // ==========================================
+  // 3. MULTI-ASSET LOADER & TRANSPARENCY CROPPER
+  // ==========================================
+  function getOpaqueBounds(img, alphaThreshold = 45) {
+    try {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = img.naturalWidth;
+      tempCanvas.height = img.naturalHeight;
+      const tCtx = tempCanvas.getContext('2d');
+      tCtx.drawImage(img, 0, 0);
+      const data = tCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height).data;
+
+      let minX = tempCanvas.width, minY = tempCanvas.height, maxX = 0, maxY = 0;
+      let found = false;
+
+      for (let y = 0; y < tempCanvas.height; y++) {
+        for (let x = 0; x < tempCanvas.width; x++) {
+          const alpha = data[(y * tempCanvas.width + x) * 4 + 3];
+          if (alpha > alphaThreshold) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+            found = true;
+          }
+        }
+      }
+
+      if (found && (maxX - minX > 10) && (maxY - minY > 10)) {
+        return { sx: minX, sy: minY, sw: maxX - minX + 1, sh: maxY - minY + 1, cropped: true };
+      }
+    } catch (err) {}
+    return { sx: 0, sy: 0, sw: img.naturalWidth, sh: img.naturalHeight, cropped: false };
+  }
+
+  function loadSmartSprite(candidates, alphaThreshold = 45) {
+    const state = { img: new Image(), loaded: false, crop: null, index: 0 };
+    state.img.onload = () => {
+      if (state.img.naturalWidth > 0) {
+        state.crop = getOpaqueBounds(state.img, alphaThreshold);
+        state.loaded = true;
+      }
+    };
+    state.img.onerror = () => {
+      state.index++;
+      if (state.index < candidates.length) {
+        state.img.src = candidates[state.index];
+      }
+    };
+    state.img.src = candidates[0];
+    return state;
+  }
+
+  const playerCarSprites = [
+    loadSmartSprite(['./assets/car_player1.png', './assets/car_player.png']),
+    loadSmartSprite(['./assets/car_player2.png', './assets/car_player.png']),
+    loadSmartSprite(['./assets/car_player3.png', './assets/car_player.png']),
+    loadSmartSprite(['./assets/car_player4.png', './assets/car_player.png'])
+  ];
+
+  const policeSprite = loadSmartSprite([
+    './assets/car_police1.png',
+    './assets/car_police.png'
+  ]);
+
+  const trafficSprite = loadSmartSprite([
+    './assets/car_trafic1.png',
+    './assets/car_traffic1.png',
+    './assets/car_traffic.png',
+    './assets/car_trafic.png'
+  ]);
+
+  const buildingSprites = [
+    loadSmartSprite(['./assets/building.png', './assets/building1.png'], 60),
+    loadSmartSprite(['./assets/building1.png', './assets/building.png'], 60)
+  ];
+
+  const roadImage = new Image();
+  let roadPattern = null;
+  const roadCandidates = [
+    './assets/road_tile.jpg',
+    './assets/road_tile.png',
+    './assets/road_tile.jpeg',
+    './assets/road.jpg',
+    './assets/road.png'
+  ];
+  let roadIdx = 0;
+
+  function createProceduralAsphaltPattern() {
+    const pCanvas = document.createElement('canvas');
+    pCanvas.width = 256;
+    pCanvas.height = 256;
+    const pCtx = pCanvas.getContext('2d');
+
+    pCtx.fillStyle = '#22242c';
+    pCtx.fillRect(0, 0, 256, 256);
+
+    for (let i = 0; i < 4500; i++) {
+      const x = Math.random() * 256;
+      const y = Math.random() * 256;
+      const shade = 26 + Math.floor(Math.random() * 24);
+      pCtx.fillStyle = `rgb(${shade}, ${shade + 1}, ${shade + 5})`;
+      pCtx.fillRect(x, y, 2, 2);
+    }
+    return ctx.createPattern(pCanvas, 'repeat');
+  }
+
+  roadPattern = createProceduralAsphaltPattern();
+  roadImage.onload = () => {
+    if (roadImage.naturalWidth > 0) roadPattern = ctx.createPattern(roadImage, 'repeat');
+  };
+  roadImage.onerror = () => {
+    roadIdx++;
+    if (roadIdx < roadCandidates.length) roadImage.src = roadCandidates[roadIdx];
+  };
+  roadImage.src = roadCandidates[0];
+
+  // ==========================================
+  // 4. CITY BLOCKS & ZERO-INVISIBLE-WALL HITBOXES
+  // ==========================================
+  const buildings = [];
+  const neonPalette = ['#00d2d3', '#ff9f43', '#ff6b6b', '#5f27cd', '#1dd1a1', '#f368e0'];
+  const BUILDING_COLLISION_INSET = 18;
+
+  function generateCityGrid() {
+    for (let row = 0; row < NUM_BLOCKS; row++) {
+      for (let col = 0; col < NUM_BLOCKS; col++) {
+        const bx = Math.round(ROAD_WIDTH + col * (BLOCK_SIZE + ROAD_WIDTH));
+        const by = Math.round(ROAD_WIDTH + row * (BLOCK_SIZE + ROAD_WIDTH));
+        const color = neonPalette[(row * NUM_BLOCKS + col) % neonPalette.length];
+        const variant = (row + col) % 2;
+
+        buildings.push({
+          x: bx,
+          y: by,
+          width: BLOCK_SIZE,
+          height: BLOCK_SIZE,
+          hitX: bx + BUILDING_COLLISION_INSET,
+          hitY: by + BUILDING_COLLISION_INSET,
+          hitW: BLOCK_SIZE - BUILDING_COLLISION_INSET * 2,
+          hitH: BLOCK_SIZE - BUILDING_COLLISION_INSET * 2,
+          neonColor: color,
+          variant: variant
+        });
+      }
+    }
+  }
+  generateCityGrid();
+
+  function getAvenueCenter(index) {
+    return ROAD_WIDTH / 2 + index * (BLOCK_SIZE + ROAD_WIDTH);
+  }
+
+  function getRandomRoadPosition(minDistFromX, minDistFromY, minDist = 1400) {
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const avenueIndex = Math.floor(Math.random() * (NUM_BLOCKS + 1));
+      const avenueCenter = getAvenueCenter(avenueIndex);
+      const laneOffset = (Math.random() - 0.5) * 160;
+      const alongRoad = 300 + Math.random() * (WORLD_WIDTH - 600);
+
+      const isHorizontal = Math.random() < 0.5;
+      const rx = isHorizontal ? alongRoad : avenueCenter + laneOffset;
+      const ry = isHorizontal ? avenueCenter + laneOffset : alongRoad;
+
+      const pad = 110;
+      let insideBuilding = false;
+      for (const b of buildings) {
+        if (rx > b.x - pad && rx < b.x + b.width + pad && ry > b.y - pad && ry < b.y + b.height + pad) {
+          insideBuilding = true;
+          break;
+        }
+      }
+
+      if (!insideBuilding && Math.hypot(rx - minDistFromX, ry - minDistFromY) >= minDist) {
+        return { x: rx, y: ry };
+      }
+    }
+    return { x: getAvenueCenter(3), y: getAvenueCenter(3) };
+  }
+
+  // ==========================================
+  // 5. PLAYER CAR & SELECTABLE PRESETS (1-4)
+  // ==========================================
+  const CAR_PRESETS = [
+    { name: 'CAR 1', color: '#ff4757', accel: 0.25, maxSpeed: 9.2, sportGrip: 0.65, handbrakeGrip: 0.968 },
+    { name: 'CAR 2', color: '#00d2d3', accel: 0.26, maxSpeed: 9.0, sportGrip: 0.68, handbrakeGrip: 0.976 },
+    { name: 'CAR 3', color: '#ff9f43', accel: 0.28, maxSpeed: 9.7, sportGrip: 0.62, handbrakeGrip: 0.964 },
+    { name: 'CAR 4', color: '#a55eea', accel: 0.30, maxSpeed: 10.0, sportGrip: 0.64, handbrakeGrip: 0.970 }
+  ];
+
+  const BUSTED_DURATION = 3.2;
+
+  const car = {
+    selectedPreset: 0,
+    x: getAvenueCenter(3),
+    y: getAvenueCenter(3),
+    vx: 0,
+    vy: 0,
+    angle: 0,
+    angularVelocity: 0,
+
+    width: 56,
+    height: 110,
+
+    accel: 0.25,
+    brakeDecel: 0.44,
+    reverseAccel: 0.16,
+    maxSpeed: 9.2,
+    maxReverseSpeed: 4.2,
+    normalDrag: 0.984,
+    driftDrag: 0.992,
+
+    sportSteer: 0.0086,
+    driftSteer: 0.0118,
+    angularDamping: 0.80,
+
+    sportGrip: 0.65,
+    handbrakeGrip: 0.968,
+    currentGrip: 0.65,
+    slipThreshold: 1.15,
+
+    health: 100,
+    heat: 0,
+    lockedHeat2: false, // Once Heat reaches Level 2 (50%+), the chase NEVER stops!
+    bustedTimer: 0,
+    isGameOver: false,
+
+    runDeliveries: 0,
+    driftScore: 0,
+    driftMultiplier: 1.0,
+    driftTimer: 0,
+    damageCooldown: 0
+  };
+
+  window.selectPlayerCar = function(index) {
+    car.selectedPreset = index;
+    const p = CAR_PRESETS[index];
+    car.accel = p.accel;
+    car.maxSpeed = p.maxSpeed;
+    car.sportGrip = p.sportGrip;
+    car.handbrakeGrip = p.handbrakeGrip;
+
+    for (let i = 0; i < 4; i++) {
+      document.getElementById(`carBtn${i}`).classList.toggle('active', i === index);
+    }
+  };
+
+  const camera = {
+    x: car.x - canvas.width / 2,
+    y: car.y - canvas.height / 2,
+    lerpSpeed: 0.14
+  };
+
+  // ==========================================
+  // 6. AMBIENT TRAFFIC SYSTEM
+  // ==========================================
+  const trafficCars = [];
+  const TRAFFIC_COUNT = 14;
+  const trafficColors = ['#3498db', '#e67e22', '#2ecc71', '#9b59b6', '#f1c40f', '#ecf0f1', '#1abc9c'];
+
+  function spawnTrafficCars() {
+    trafficCars.length = 0;
+    const laneOffset = 105;
+
+    for (let i = 0; i < TRAFFIC_COUNT; i++) {
+      const isHorizontal = i % 2 === 0;
+      const dir = (i % 4 < 2) ? 1 : -1;
+      const avenueIdx = i % (NUM_BLOCKS + 1);
+      const avenueCenter = getAvenueCenter(avenueIdx);
+      const alongPos = 400 + ((i * 530) % (WORLD_WIDTH - 800));
+
+      let tx, ty, tangle;
+      if (isHorizontal) {
+        tx = alongPos;
+        ty = avenueCenter + (dir === 1 ? laneOffset : -laneOffset);
+        tangle = dir === 1 ? Math.PI / 2 : -Math.PI / 2;
+      } else {
+        tx = avenueCenter + (dir === 1 ? -laneOffset : laneOffset);
+        ty = alongPos;
+        tangle = dir === 1 ? 0 : Math.PI;
+      }
+
+      trafficCars.push({
+        x: tx,
+        y: ty,
+        vx: 0,
+        vy: 0,
+        angle: tangle,
+        width: 52,
+        height: 102,
+        baseSpeed: 3.2 + (i % 3) * 0.55,
+        currentSpeed: 3.2,
+        color: trafficColors[i % trafficColors.length]
+      });
+    }
+  }
+  spawnTrafficCars();
+
+  function updateTraffic() {
+    for (let i = 0; i < trafficCars.length; i++) {
+      const t = trafficCars[i];
+      const fx = Math.sin(t.angle);
+      const fy = -Math.cos(t.angle);
+
+      let obstacleAhead = false;
+      const lookAheadDist = 175;
+
+      const dxP = car.x - t.x;
+      const dyP = car.y - t.y;
+      const forwardDotP = dxP * fx + dyP * fy;
+      const lateralDotP = Math.abs(dxP * (-fy) + dyP * fx);
+      if (forwardDotP > 0 && forwardDotP < lookAheadDist && lateralDotP < 65) {
+        obstacleAhead = true;
+      }
+
+      if (!obstacleAhead) {
+        for (let j = 0; j < trafficCars.length; j++) {
+          if (i === j) continue;
+          const other = trafficCars[j];
+          const dx = other.x - t.x;
+          const dy = other.y - t.y;
+          const fDot = dx * fx + dy * fy;
+          const lDot = Math.abs(dx * (-fy) + dy * fx);
+          if (fDot > 0 && fDot < lookAheadDist && lDot < 60) {
+            obstacleAhead = true;
+            break;
+          }
+        }
+      }
+
+      const targetSpeed = obstacleAhead ? 0 : t.baseSpeed;
+      t.currentSpeed += (targetSpeed - t.currentSpeed) * (obstacleAhead ? 0.18 : 0.05);
+
+      t.vx = fx * t.currentSpeed;
+      t.vy = fy * t.currentSpeed;
+      t.x += t.vx;
+      t.y += t.vy;
+
+      const margin = 120;
+      if (t.x < margin) t.x = WORLD_WIDTH - margin;
+      if (t.x > WORLD_WIDTH - margin) t.x = margin;
+      if (t.y < margin) t.y = WORLD_HEIGHT - margin;
+      if (t.y > WORLD_HEIGHT - margin) t.y = margin;
+    }
+  }
+
+  // ==========================================
+  // 7. PERSISTENT POLICE PURSUIT & PATROL SYSTEM
+  // ==========================================
+  // - Cops NEVER despawn once spawned!
+  // - If Heat drops below 25% (only possible before Heat Level 2), cops switch to 'PATROL' mode
+  //   and drive around city avenues instead of vanishing.
+  // - Once Heat reaches Level 2 (50%+), car.lockedHeat2 = true: the chase NEVER stops even from afar!
+  const policeUnits = [];
+  let sirenPhase = 0;
+  let dispatchNoticeCooldown = 0;
+
+  function getPoliceDifficultyProfile() {
+    // Lock into permanent pursuit once Heat hits 50% (Level 2)
+    if (car.heat >= 50) {
+      car.lockedHeat2 = true;
+    }
+    if (car.lockedHeat2 && car.heat < 50) {
+      car.heat = 50;
+    }
+
+    const heatFactor = Math.max(0, (car.heat - 25) / 75);
+    const jobFactor = Math.min(1.0, car.runDeliveries / 6);
+    const difficulty = Math.min(1.0, heatFactor * 0.65 + jobFactor * 0.35);
+
+    // Minimum total units that should exist in the world based on peak Heat reached:
+    let targetTotalUnits = policeUnits.length;
+    if (car.heat >= 28 && targetTotalUnits < 1) targetTotalUnits = 1;
+    if ((car.heat >= 50 || (car.heat >= 42 && car.runDeliveries >= 2)) && targetTotalUnits < 2) targetTotalUnits = 2;
+    if ((car.heat >= 82 || (car.heat >= 68 && car.runDeliveries >= 4)) && targetTotalUnits < 3) targetTotalUnits = 3;
+
+    // Are units actively chasing the player or patrolling the streets?
+    // Once lockedHeat2 is true, they ALWAYS chase relentlessly!
+    const isChasing = car.lockedHeat2 || car.heat >= 22;
+
+    const maxSpeed = 8.00 + difficulty * 0.55;
+    const turnRate = 0.052 + difficulty * 0.008;
+    const accel = 0.17 + difficulty * 0.03;
+    const leadFrames = Math.round(5 + difficulty * 3);
+
+    let tierName = 'STANDBY';
+    let tierColor = '#a4b0be';
+    if (!isChasing && policeUnits.length > 0) {
+      tierName = 'PATROLLING CITY';
+      tierColor = '#00d2d3';
+    } else if (car.lockedHeat2 && targetTotalUnits >= 3) {
+      tierName = 'RELENTLESS (MAX)';
+      tierColor = '#ff4757';
+    } else if (car.lockedHeat2) {
+      tierName = 'RELENTLESS CHASE';
+      tierColor = '#ff6b6b';
+    } else if (isChasing) {
+      tierName = 'ACTIVE PURSUIT';
+      tierColor = '#feca57';
+    }
+
+    return { targetTotalUnits, isChasing, maxSpeed, turnRate, accel, leadFrames, tierName, tierColor };
+  }
+
+  function assignNewPatrolWaypoint(cop) {
+    const wp = getRandomRoadPosition(cop.x, cop.y, 1200);
+    cop.patrolX = wp.x;
+    cop.patrolY = wp.y;
+  }
+
+  function spawnPoliceUnit(profile) {
+    const pos = getRandomRoadPosition(car.x, car.y, 1100);
+    const wp = getRandomRoadPosition(pos.x, pos.y, 1200);
+    policeUnits.push({
+      x: pos.x,
+      y: pos.y,
+      vx: 0,
+      vy: 0,
+      angle: 0,
+      width: 56,
+      height: 110,
+      speed: 0,
+      maxSpeed: profile.maxSpeed,
+      stunTimer: 0,
+      state: 'CHASE', // 'CHASE' or 'PATROL'
+      patrolX: wp.x,
+      patrolY: wp.y
+    });
+
+    // Cooldown prevents stacked "POLICE DISPATCHED!" text spam!
+    if (dispatchNoticeCooldown <= 0) {
+      spawnFloatingText(`POLICE UNIT #${policeUnits.length} DISPATCHED!`, car.x, car.y - 70, '#ff4757');
+      dispatchNoticeCooldown = 4.0;
+    }
+  }
+
+  function updatePolicePursuit(dt) {
+    sirenPhase += dt * 14;
+    if (dispatchNoticeCooldown > 0) dispatchNoticeCooldown -= dt;
+
+    const profile = getPoliceDifficultyProfile();
+
+    // Only spawn new units up to targetTotalUnits; NEVER pop/despawn existing units!
+    while (policeUnits.length < profile.targetTotalUnits) {
+      spawnPoliceUnit(profile);
+    }
+
+    policeCountDisplay.textContent = policeUnits.length;
+    threatTierDisplay.textContent = profile.tierName;
+    threatTierDisplay.style.color = profile.tierColor;
+
+    let anyCopInArrestRange = false;
+    let minCopDist = Infinity;
+
+    for (let i = 0; i < policeUnits.length; i++) {
+      const cop = policeUnits[i];
+      if (cop.stunTimer > 0) cop.stunTimer -= dt;
+
+      const distToPlayer = Math.hypot(car.x - cop.x, car.y - cop.y);
+      if (distToPlayer < minCopDist) minCopDist = distToPlayer;
+
+      // Switch between CHASE and PATROL (if player somehow gets within 260px of a patrolling cop, it spots them!)
+      if (profile.isChasing || distToPlayer < 260) {
+        cop.state = 'CHASE';
+        if (car.heat < 25) car.heat = 28; // Spotted by patrol car!
+      } else {
+        cop.state = 'PATROL';
+      }
+
+      let targetX, targetY, activeMaxSpeed;
+
+      if (cop.state === 'CHASE') {
+        const flankSign = (i % 2 === 0 ? 1 : -1) * (i > 0 ? 55 : 0);
+        targetX = car.x + car.vx * profile.leadFrames + Math.cos(car.angle) * flankSign;
+        targetY = car.y + car.vy * profile.leadFrames + Math.sin(car.angle) * flankSign;
+        activeMaxSpeed = profile.maxSpeed;
+      } else {
+        // PATROL MODE: Drive away to random city road waypoints instead of despawning
+        const distToWp = Math.hypot(cop.patrolX - cop.x, cop.patrolY - cop.y);
+        if (distToWp < 220) {
+          assignNewPatrolWaypoint(cop);
+        }
+        targetX = cop.patrolX;
+        targetY = cop.patrolY;
+        activeMaxSpeed = 4.6; // Calm patrol cruising speed
+      }
+
+      const dx = targetX - cop.x;
+      const dy = targetY - cop.y;
+      let desiredAngle = Math.atan2(dx, -dy);
+
+      // Obstacle feelers around city blocks
+      const fx = Math.sin(cop.angle);
+      const fy = -Math.cos(cop.angle);
+      const rx = Math.cos(cop.angle);
+      const ry = Math.sin(cop.angle);
+
+      const feelerDist = 145;
+      const leftFeelerX = cop.x + (fx * 0.85 - rx * 0.5) * feelerDist;
+      const leftFeelerY = cop.y + (fy * 0.85 - ry * 0.5) * feelerDist;
+      const rightFeelerX = cop.x + (fx * 0.85 + rx * 0.5) * feelerDist;
+      const rightFeelerY = cop.y + (fy * 0.85 + ry * 0.5) * feelerDist;
+
+      let leftBlocked = false;
+      let rightBlocked = false;
+      for (let bIdx = 0; bIdx < buildings.length; bIdx++) {
+        const b = buildings[bIdx];
+        if (leftFeelerX > b.hitX && leftFeelerX < b.hitX + b.hitW && leftFeelerY > b.hitY && leftFeelerY < b.hitY + b.hitH) {
+          leftBlocked = true;
+        }
+        if (rightFeelerX > b.hitX && rightFeelerX < b.hitX + b.hitW && rightFeelerY > b.hitY && rightFeelerY < b.hitY + b.hitH) {
+          rightBlocked = true;
+        }
+      }
+
+      if (leftBlocked && !rightBlocked) desiredAngle = cop.angle + 0.68;
+      else if (rightBlocked && !leftBlocked) desiredAngle = cop.angle - 0.68;
+      else if (leftBlocked && rightBlocked) {
+        desiredAngle = cop.angle + Math.PI / 2;
+        if (cop.state === 'PATROL') assignNewPatrolWaypoint(cop);
+      }
+
+      let diff = desiredAngle - cop.angle;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+
+      const maxTurn = cop.stunTimer > 0 ? 0.025 : profile.turnRate;
+      cop.angle += Math.sign(diff) * Math.min(Math.abs(diff), maxTurn);
+
+      const targetMax = cop.stunTimer > 0 ? activeMaxSpeed * 0.62 : activeMaxSpeed;
+      cop.speed = Math.min(targetMax, cop.speed + profile.accel);
+      cop.vx = Math.sin(cop.angle) * cop.speed;
+      cop.vy = -Math.cos(cop.angle) * cop.speed;
+
+      cop.x += cop.vx;
+      cop.y += cop.vy;
+
+      resolveEntityBuildingCollision(cop, 24);
+
+      // Police Unit-to-Unit separation
+      for (let j = i + 1; j < policeUnits.length; j++) {
+        const otherCop = policeUnits[j];
+        const cdx = cop.x - otherCop.x;
+        const cdy = cop.y - otherCop.y;
+        const cDist = Math.hypot(cdx, cdy);
+        if (cDist < 58 && cDist > 0.01) {
+          const push = (58 - cDist) * 0.5;
+          cop.x += (cdx / cDist) * push;
+          cop.y += (cdy / cDist) * push;
+          otherCop.x -= (cdx / cDist) * push;
+          otherCop.y -= (cdy / cDist) * push;
+        }
+      }
+
+      // Arrest check only when actively chasing
+      const playerSpeed = Math.hypot(car.vx, car.vy);
+      if (cop.state === 'CHASE' && distToPlayer < 185 && playerSpeed < 7.4) {
+        anyCopInArrestRange = true;
+      }
+    }
+
+    // Distance cooldown ONLY works at Heat Level 1 (< 50% Heat).
+    // Once Heat Level 2 (car.lockedHeat2) is reached, being far away NEVER stops the chase!
+    if (!car.lockedHeat2 && policeUnits.length > 0 && minCopDist > 1250) {
+      car.heat = Math.max(0, car.heat - dt * 3.5);
+    }
+
+    // Center-Screen Arrest Slider Update
+    if (anyCopInArrestRange) {
+      car.bustedTimer += dt;
+      centerArrestHud.style.display = 'flex';
+      const pct = Math.min(100, (car.bustedTimer / BUSTED_DURATION) * 100);
+      bustedBar.style.width = `${pct}%`;
+      arrestTimeText.textContent = `${car.bustedTimer.toFixed(1)} / ${BUSTED_DURATION.toFixed(1)}s`;
+
+      if (car.bustedTimer >= BUSTED_DURATION) {
+        triggerGameOver('BUSTED', 'Police units boxed you in for 3.2 seconds!');
+      }
+    } else {
+      car.bustedTimer = Math.max(0, car.bustedTimer - dt * 1.65);
+      if (car.bustedTimer <= 0.02) {
+        centerArrestHud.style.display = 'none';
+      } else {
+        const pct = (car.bustedTimer / BUSTED_DURATION) * 100;
+        bustedBar.style.width = `${pct}%`;
+        arrestTimeText.textContent = `${car.bustedTimer.toFixed(1)} / ${BUSTED_DURATION.toFixed(1)}s`;
+      }
+    }
+  }
+
+  function triggerGameOver(title, subtitle) {
+    car.isGameOver = true;
+    overlayTitle.textContent = title;
+    overlaySub.textContent = subtitle;
+    gameOverOverlay.style.display = 'flex';
+  }
+
+  window.resetRun = function() {
+    car.x = getAvenueCenter(3);
+    car.y = getAvenueCenter(3);
+    car.vx = 0;
+    car.vy = 0;
+    car.angle = 0;
+    car.angularVelocity = 0;
+    car.health = 100;
+    car.heat = 0;
+    car.lockedHeat2 = false;
+    car.bustedTimer = 0;
+    car.runDeliveries = 0;
+    car.driftScore = 0;
+    car.driftMultiplier = 1.0;
+    car.driftTimer = 0;
+    car.isGameOver = false;
+
+    policeUnits.length = 0;
+    dispatchNoticeCooldown = 0;
+    spawnTrafficCars();
+    initDeliveryMission(true);
+    gameOverOverlay.style.display = 'none';
+    centerArrestHud.style.display = 'none';
+  };
+
+  // ==========================================
+  // 8. DELIVERY OBJECTIVE & PARTICLES
+  // ==========================================
+  const mission = {
+    state: 'PICKUP',
+    targetX: 0,
+    targetY: 0,
+    radius: 80,
+    timeLeft: 45.0,
+    pulsePhase: 0
+  };
+
+  const smokeParticles = [];
+  const floatingTexts = [];
+
+  // Deduplicates identical messages so floating text never stacks into a wall of spam
+  function spawnFloatingText(text, x, y, color = '#1dd1a1') {
+    for (let i = 0; i < floatingTexts.length; i++) {
+      if (floatingTexts[i].text === text && floatingTexts[i].alpha > 0.65) {
+        return;
+      }
+    }
+    floatingTexts.push({ text, x, y, vy: -1.6, alpha: 1.0, scale: 1.0, color });
+  }
+
+  function initDeliveryMission(isNewPickup = true) {
+    if (isNewPickup) {
+      mission.state = 'PICKUP';
+      const pos = getRandomRoadPosition(car.x, car.y, 1300);
+      mission.targetX = pos.x;
+      mission.targetY = pos.y;
+      mission.timeLeft = 45.0;
+      missionStatusText.textContent = 'PICKUP PACKAGE (CYAN ZONE)';
+      missionStatusText.style.color = '#00f2fe';
+      hudCenter.style.borderBottomColor = '#00f2fe';
+    } else {
+      mission.state = 'DROPOFF';
+      const pos = getRandomRoadPosition(car.x, car.y, 1600);
+      mission.targetX = pos.x;
+      mission.targetY = pos.y;
+      mission.timeLeft = 45.0;
+      missionStatusText.textContent = 'DELIVER PACKAGE (MAGENTA ZONE)';
+      missionStatusText.style.color = '#ff007f';
+      hudCenter.style.borderBottomColor = '#ff007f';
+    }
+  }
+  initDeliveryMission(true);
+
+  function emitTireSmoke(fx, fy, rx, ry, intensity) {
+    const rearOffset = -car.height * 0.35;
+    const wheelTrack = car.width * 0.35;
+
+    const tires = [
+      { x: car.x + fx * rearOffset - rx * wheelTrack, y: car.y + fy * rearOffset - ry * wheelTrack },
+      { x: car.x + fx * rearOffset + rx * wheelTrack, y: car.y + fy * rearOffset + ry * wheelTrack }
+    ];
+
+    for (const tire of tires) {
+      if (Math.random() < 0.75) {
+        smokeParticles.push({
+          x: tire.x + (Math.random() - 0.5) * 8,
+          y: tire.y + (Math.random() - 0.5) * 8,
+          vx: -car.vx * 0.15 + (Math.random() - 0.5) * 0.9,
+          vy: -car.vy * 0.15 + (Math.random() - 0.5) * 0.9,
+          radius: 7 + Math.random() * 6,
+          maxRadius: 25 + Math.min(intensity * 3, 16),
+          alpha: 0.42 + Math.min(intensity * 0.05, 0.25),
+          decay: 0.012 + Math.random() * 0.006
+        });
+      }
+    }
+  }
+
+  // ==========================================
+  // 9. INPUT HANDLING
+  // ==========================================
+  const keys = { up: false, down: false, left: false, right: false, space: false };
+
+  window.addEventListener('keydown', (e) => {
+    if (car.isGameOver && (e.code === 'Space' || e.code === 'Enter')) {
+      resetRun();
+      return;
+    }
+    switch(e.code) {
+      case 'ArrowUp': case 'KeyW': keys.up = true; break;
+      case 'ArrowDown': case 'KeyS': keys.down = true; break;
+      case 'ArrowLeft': case 'KeyA': keys.left = true; break;
+      case 'ArrowRight': case 'KeyD': keys.right = true; break;
+      case 'Space': keys.space = true; e.preventDefault(); break;
+      case 'Digit1': selectPlayerCar(0); break;
+      case 'Digit2': selectPlayerCar(1); break;
+      case 'Digit3': selectPlayerCar(2); break;
+      case 'Digit4': selectPlayerCar(3); break;
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    switch(e.code) {
+      case 'ArrowUp': case 'KeyW': keys.up = false; break;
+      case 'ArrowDown': case 'KeyS': keys.down = false; break;
+      case 'ArrowLeft': case 'KeyA': keys.left = false; break;
+      case 'ArrowRight': case 'KeyD': keys.right = false; break;
+      case 'Space': keys.space = false; break;
+    }
+  });
+
+  // ==========================================
+  // 10. MULTI-CIRCLE CAPSULE COLLISION ENGINE
+  // ==========================================
+  function resolvePlayerCollisions() {
+    const circleRadius = 22;
+    const offsets = [-30, 0, 30];
+    const fx = Math.sin(car.angle);
+    const fy = -Math.cos(car.angle);
+
+    const margin = 45;
+    if (car.x < margin) { car.x = margin; car.vx *= -0.4; }
+    if (car.x > WORLD_WIDTH - margin) { car.x = WORLD_WIDTH - margin; car.vx *= -0.4; }
+    if (car.y < margin) { car.y = margin; car.vy *= -0.4; }
+    if (car.y > WORLD_HEIGHT - margin) { car.y = WORLD_HEIGHT - margin; car.vy *= -0.4; }
+
+    let hitBuilding = false;
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      if (car.x + 80 < b.hitX || car.x - 80 > b.hitX + b.hitW || car.y + 80 < b.hitY || car.y - 80 > b.hitY + b.hitH) {
+        continue;
+      }
+
+      for (const off of offsets) {
+        const cx = car.x + fx * off;
+        const cy = car.y + fy * off;
+
+        const closestX = Math.max(b.hitX, Math.min(cx, b.hitX + b.hitW));
+        const closestY = Math.max(b.hitY, Math.min(cy, b.hitY + b.hitH));
+        const dx = cx - closestX;
+        const dy = cy - closestY;
+        const distSq = dx * dx + dy * dy;
+
+        if (distSq < circleRadius * circleRadius) {
+          const dist = Math.sqrt(distSq) || 0.001;
+          const overlap = circleRadius - dist;
+          const nx = dx / dist;
+          const ny = dy / dist;
+
+          car.x += nx * overlap;
+          car.y += ny * overlap;
+
+          const vn = car.vx * nx + car.vy * ny;
+          if (vn < 0) {
+            car.vx -= 1.42 * vn * nx;
+            car.vy -= 1.42 * vn * ny;
+            car.vx *= 0.82;
+            car.vy *= 0.82;
+          }
+          hitBuilding = true;
+        }
+      }
+    }
+
+    if (hitBuilding) {
+      car.angularVelocity *= 0.5;
+      car.driftTimer = 0;
+      car.driftMultiplier = 1.0;
+    }
+
+    // Vehicle-to-Vehicle Collisions
+    const allVehicles = [...trafficCars, ...policeUnits];
+    for (let i = 0; i < allVehicles.length; i++) {
+      const v = allVehicles[i];
+      const dx = car.x - v.x;
+      const dy = car.y - v.y;
+      const minDist = 54;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist < minDist && dist > 0.001) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const overlap = minDist - dist;
+
+        car.x += nx * overlap * 0.65;
+        car.y += ny * overlap * 0.65;
+        v.x -= nx * overlap * 0.35;
+        v.y -= ny * overlap * 0.35;
+
+        if (v.maxSpeed !== undefined) {
+          v.speed *= 0.62;
+          v.stunTimer = 0.45;
+          v.state = 'CHASE'; // Hitting a patrol car immediately triggers pursuit!
+          if (car.heat < 32) car.heat = 32;
+        }
+
+        const impactSpeed = Math.hypot(car.vx - v.vx, car.vy - v.vy);
+        car.vx = (car.vx * 0.55) + nx * 2.4;
+        car.vy = (car.vy * 0.55) + ny * 2.4;
+
+        car.driftTimer = 0;
+        car.driftMultiplier = 1.0;
+
+        if (car.damageCooldown <= 0 && impactSpeed > 1.8) {
+          const dmg = Math.min(15, Math.max(4, Math.round(impactSpeed * 1.5)));
+          car.health = Math.max(0, car.health - dmg);
+          car.heat = Math.min(100, car.heat + 15);
+          car.damageCooldown = 0.60;
+
+          spawnFloatingText(`CRASH! -${dmg}% HP | +HEAT`, car.x, car.y - 45, '#ff4757');
+
+          if (car.health <= 0) {
+            triggerGameOver('WRECKED', 'Your vehicle took too much collision damage!');
+          }
+        }
+      }
+    }
+  }
+
+  function resolveEntityBuildingCollision(entity, radius) {
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      if (entity.x + 60 < b.hitX || entity.x - 60 > b.hitX + b.hitW || entity.y + 60 < b.hitY || entity.y - 60 > b.hitY + b.hitH) {
+        continue;
+      }
+      const closestX = Math.max(b.hitX, Math.min(entity.x, b.hitX + b.hitW));
+      const closestY = Math.max(b.hitY, Math.min(entity.y, b.hitY + b.hitH));
+      const dx = entity.x - closestX;
+      const dy = entity.y - closestY;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < radius * radius) {
+        const dist = Math.sqrt(distSq) || 0.001;
+        entity.x += (dx / dist) * (radius - dist);
+        entity.y += (dy / dist) * (radius - dist);
+      }
+    }
+  }
+
+  // ==========================================
+  // 11. MAIN GAME LOOP UPDATE
+  // ==========================================
+  let lastTimestamp = performance.now();
+
+  function updateGame(timestamp) {
+    const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.1);
+    lastTimestamp = timestamp;
+
+    if (car.isGameOver) return;
+    if (car.damageCooldown > 0) car.damageCooldown -= dt;
+
+    const forwardX = Math.sin(car.angle);
+    const forwardY = -Math.cos(car.angle);
+    const rightX = Math.cos(car.angle);
+    const rightY = Math.sin(car.angle);
+
+    let forwardVel = car.vx * forwardX + car.vy * forwardY;
+    let lateralVel = car.vx * rightX + car.vy * rightY;
+
+    // 1. Throttle & Braking
+    if (keys.up) {
+      forwardVel += (forwardVel < 0) ? car.brakeDecel : car.accel;
+    } else if (keys.down) {
+      if (forwardVel > 0.25) {
+        forwardVel = Math.max(0, forwardVel - car.brakeDecel);
+      } else {
+        forwardVel -= car.reverseAccel;
+      }
+    }
+
+    // 2. Dual-Mode Sport vs. Handbrake Drift Physics
+    const currentSpeed = Math.hypot(car.vx, car.vy);
+    if (keys.space) {
+      car.currentGrip += (car.handbrakeGrip - car.currentGrip) * 0.42;
+      if (currentSpeed > 2.0) {
+        if (keys.left) lateralVel += 0.22;
+        if (keys.right) lateralVel -= 0.22;
+      }
+    } else {
+      car.currentGrip += (car.sportGrip - car.currentGrip) * 0.085;
+    }
+
+    // 3. Steering
+    if (currentSpeed > 0.12) {
+      const speedFactor = Math.min(currentSpeed / 2.2, 1.0);
+      const reverseDir = forwardVel >= -0.1 ? 1 : -1;
+      const activeSteer = keys.space ? car.driftSteer : car.sportSteer;
+      const turnRate = activeSteer * speedFactor * reverseDir;
+
+      if (keys.left) car.angularVelocity -= turnRate;
+      if (keys.right) car.angularVelocity += turnRate;
+    } else {
+      car.angularVelocity = 0;
+    }
+
+    car.angle += car.angularVelocity;
+    car.angularVelocity *= car.angularDamping;
+
+    // 4. Velocity Reconstruction & Speed Cap
+    lateralVel *= car.currentGrip;
+    const activeDrag = keys.space ? car.driftDrag : car.normalDrag;
+    car.vx = (forwardX * forwardVel + rightX * lateralVel) * activeDrag;
+    car.vy = (forwardY * forwardVel + rightY * lateralVel) * activeDrag;
+
+    const totalSpeedAfter = Math.hypot(car.vx, car.vy);
+    const maxAllowed = forwardVel >= -0.1 ? car.maxSpeed : car.maxReverseSpeed;
+    if (totalSpeedAfter > maxAllowed) {
+      const scale = maxAllowed / totalSpeedAfter;
+      car.vx *= scale;
+      car.vy *= scale;
+    }
+
+    if (!keys.up && !keys.down && totalSpeedAfter < 0.04) {
+      car.vx = 0;
+      car.vy = 0;
+    }
+
+    car.x += car.vx;
+    car.y += car.vy;
+
+    // 5. Update Traffic, Collisions & Persistent Police Pursuit
+    updateTraffic();
+    resolvePlayerCollisions();
+
+    const speedNow = Math.hypot(car.vx, car.vy);
+    const slipAmount = Math.abs(lateralVel);
+    const isDrifting = (slipAmount > car.slipThreshold || (keys.space && speedNow > 2.5)) && speedNow > 1.8;
+
+    if (speedNow > 7.8 || isDrifting) {
+      car.heat = Math.min(100, car.heat + dt * (isDrifting ? 3.8 : 2.0));
+    } else if (!car.lockedHeat2 && policeUnits.every(u => u.state === 'PATROL')) {
+      car.heat = Math.max(0, car.heat - dt * 2.5);
+    }
+
+    updatePolicePursuit(dt);
+
+    // 6. Camera Follow
+    const targetCamX = car.x - canvas.width / 2;
+    const targetCamY = car.y - canvas.height / 2;
+    camera.x += (targetCamX - camera.x) * camera.lerpSpeed;
+    camera.y += (targetCamY - camera.y) * camera.lerpSpeed;
+    camera.x = Math.max(0, Math.min(WORLD_WIDTH - canvas.width, camera.x));
+    camera.y = Math.max(0, Math.min(WORLD_HEIGHT - canvas.height, camera.y));
+
+    // 7. Drift Scoring & Smoke Effects
+    if (isDrifting) {
+      car.driftTimer++;
+      car.driftMultiplier = Math.min(5.0, 1.0 + Math.floor(car.driftTimer / 40) * 0.5);
+      const points = Math.floor((slipAmount * 2.2 + (keys.space ? 4 : 0)) * car.driftMultiplier);
+      car.driftScore += points;
+
+      if (car.driftScore > career.highScore) {
+        career.highScore = car.driftScore;
+        saveCareerStats();
+        updateCareerHUD();
+      }
+
+      const visualSlip = Math.max(slipAmount, keys.space ? 2.8 : 1.5);
+      drawSkidMarks(forwardX, forwardY, rightX, rightY, visualSlip);
+      emitTireSmoke(forwardX, forwardY, rightX, rightY, visualSlip);
+    } else if (car.driftTimer > 0) {
+      car.driftTimer = Math.max(0, car.driftTimer - 2);
+      if (car.driftTimer === 0) car.driftMultiplier = 1.0;
+    }
+
+    // 8. Delivery Mission Update
+    updateDeliveryMission(dt);
+
+    // 9. Update Smoke & Floating Texts
+    for (let i = smokeParticles.length - 1; i >= 0; i--) {
+      const p = smokeParticles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.radius += (p.maxRadius - p.radius) * 0.08;
+      p.alpha -= p.decay;
+      if (p.alpha <= 0.01) smokeParticles.splice(i, 1);
+    }
+
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+      const ft = floatingTexts[i];
+      ft.y += ft.vy;
+      ft.scale += 0.006;
+      ft.alpha -= 0.014;
+      if (ft.alpha <= 0.01) floatingTexts.splice(i, 1);
+    }
+
+    // 10. Update HUD
+    speedDisplay.textContent = Math.round(speedNow * 18);
+    scoreDisplay.textContent = car.driftScore.toLocaleString();
+    multiplierDisplay.textContent = `${car.driftMultiplier.toFixed(1)}x`;
+    healthBar.style.width = `${car.health}%`;
+    healthBar.style.background = car.health > 40 ? '#1dd1a1' : '#ff4757';
+
+    const heatLvl = Math.floor(car.heat / 25);
+    heatText.textContent = `LVL ${heatLvl} (${Math.round(car.heat)}%)`;
+    heatBar.style.width = `${car.heat}%`;
+  }
+
+  function updateDeliveryMission(dt) {
+    mission.pulsePhase += dt * 4.5;
+    mission.timeLeft -= dt;
+
+    if (mission.timeLeft <= 0) {
+      spawnFloatingText('TIME EXPIRED! NEW ORDER', car.x, car.y - 50, '#ff4757');
+      initDeliveryMission(true);
+      return;
+    }
+
+    timerDisplay.textContent = `${Math.max(0, mission.timeLeft).toFixed(1)}s`;
+    timerDisplay.style.color = mission.timeLeft < 10 ? '#ff4757' : '#ffffff';
+
+    const distToZone = Math.hypot(car.x - mission.targetX, car.y - mission.targetY);
+    if (distToZone < mission.radius + 28) {
+      if (mission.state === 'PICKUP') {
+        if (Math.hypot(car.vx, car.vy) > 6.5) {
+          car.heat = Math.min(100, car.heat + 10);
+        }
+        spawnFloatingText('PACKAGE PICKED UP!', car.x, car.y - 50, '#00f2fe');
+        initDeliveryMission(false);
+      } else {
+        career.cash += 500;
+        career.jobs += 1;
+        car.runDeliveries += 1;
+        car.health = Math.min(100, car.health + 25);
+
+        // If below Heat Level 2, delivering cools Heat slightly so cops may switch to Patrol mode
+        // (they NEVER despawn!). If at Heat Level 2+, Heat stays locked >= 50% and pursuit never stops!
+        if (!car.lockedHeat2) {
+          car.heat = Math.max(0, car.heat - 18);
+          for (const cop of policeUnits) {
+            assignNewPatrolWaypoint(cop);
+          }
+        }
+
+        saveCareerStats();
+        updateCareerHUD();
+
+        spawnFloatingText('+$500 | REPAIRED!', car.x, car.y - 55, '#1dd1a1');
+        initDeliveryMission(true);
+      }
+    }
+  }
+
+  function drawSkidMarks(fx, fy, rx, ry, slipIntensity) {
+    const rearOffset = -car.height * 0.35;
+    const wheelTrack = car.width * 0.35;
+
+    const leftTireX = car.x + fx * rearOffset - rx * wheelTrack;
+    const leftTireY = car.y + fy * rearOffset - ry * wheelTrack;
+    const rightTireX = car.x + fx * rearOffset + rx * wheelTrack;
+    const rightTireY = car.y + fy * rearOffset + ry * wheelTrack;
+
+    const alpha = Math.min(Math.max(0.24, (slipIntensity - 0.8) / 5.0), 0.58);
+    skidCtx.fillStyle = `rgba(10, 10, 14, ${alpha})`;
+
+    skidCtx.beginPath();
+    skidCtx.arc(leftTireX, leftTireY, 5.5, 0, Math.PI * 2);
+    skidCtx.arc(rightTireX, rightTireY, 5.5, 0, Math.PI * 2);
+    skidCtx.fill();
+  }
+
+  // ==========================================
+  // 12. RENDERING ENGINE
+  // ==========================================
+  function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
+
+    // 1. Road Surface
+    drawRoadSurface();
+
+    // 2. World-Space Skid Marks
+    const camX = Math.max(0, Math.floor(camera.x));
+    const camY = Math.max(0, Math.floor(camera.y));
+    const viewW = Math.min(canvas.width, WORLD_WIDTH - camX);
+    const viewH = Math.min(canvas.height, WORLD_HEIGHT - camY);
+
+    skidCtx.save();
+    skidCtx.globalCompositeOperation = 'destination-out';
+    skidCtx.fillStyle = 'rgba(0, 0, 0, 0.002)';
+    skidCtx.fillRect(camX, camY, viewW, viewH);
+    skidCtx.restore();
+
+    ctx.drawImage(skidCanvas, camX, camY, viewW, viewH, camX, camY, viewW, viewH);
+
+    // 3. Delivery Zone
+    drawDeliveryZone();
+
+    // 4. Tire Smoke Particles
+    drawSmokeParticles();
+
+    // 5. Civilian Traffic Cars
+    drawTrafficCars();
+
+    // 6. Police Pursuit & Patrol Units
+    drawPoliceUnits();
+
+    // 7. Player Car
+    drawPlayerCar();
+
+    // 8. City Buildings
+    drawBuildings();
+
+    // 9. Navigation Arrow & Floating Reward Texts
+    drawNavigationArrow();
+    drawFloatingTexts();
+
+    // 10. World Boundary
+    ctx.strokeStyle = '#ff4757';
+    ctx.lineWidth = 12;
+    ctx.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+
+    ctx.restore();
+  }
+
+  function drawRoadSurface() {
+    if (roadPattern) {
+      ctx.fillStyle = roadPattern;
+      ctx.fillRect(camera.x, camera.y, canvas.width, canvas.height);
+    }
+
+    ctx.save();
+    for (let i = 0; i <= NUM_BLOCKS; i++) {
+      const avenueCenter = getAvenueCenter(i);
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([28, 32]);
+      ctx.beginPath();
+      ctx.moveTo(avenueCenter - 105, 0); ctx.lineTo(avenueCenter - 105, WORLD_HEIGHT);
+      ctx.moveTo(avenueCenter + 105, 0); ctx.lineTo(avenueCenter + 105, WORLD_HEIGHT);
+      ctx.moveTo(0, avenueCenter - 105); ctx.lineTo(WORLD_WIDTH, avenueCenter - 105);
+      ctx.moveTo(0, avenueCenter + 105); ctx.lineTo(WORLD_WIDTH, avenueCenter + 105);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255, 177, 66, 0.42)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([36, 36]);
+      ctx.beginPath();
+      ctx.moveTo(avenueCenter, 0); ctx.lineTo(avenueCenter, WORLD_HEIGHT);
+      ctx.moveTo(0, avenueCenter); ctx.lineTo(WORLD_WIDTH, avenueCenter);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawAutoCroppedSprite(spriteObj, w, h) {
+    if (spriteObj.loaded && spriteObj.crop) {
+      if (spriteObj.crop.cropped) {
+        ctx.drawImage(
+          spriteObj.img,
+          spriteObj.crop.sx, spriteObj.crop.sy, spriteObj.crop.sw, spriteObj.crop.sh,
+          -w / 2, -h / 2, w, h
+        );
+      } else {
+        const aspect = spriteObj.img.naturalWidth / spriteObj.img.naturalHeight;
+        let drawW = w, drawH = h;
+        if (aspect > 0.75) {
+          drawH = h * 1.12;
+          drawW = drawH * aspect;
+        }
+        ctx.drawImage(spriteObj.img, -drawW / 2, -drawH / 2, drawW, drawH);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  function drawTrafficCars() {
+    for (let i = 0; i < trafficCars.length; i++) {
+      const t = trafficCars[i];
+      if (t.x + 100 < camera.x || t.x - 100 > camera.x + canvas.width || t.y + 100 < camera.y || t.y - 100 > camera.y + canvas.height) {
+        continue;
+      }
+
+      ctx.save();
+      ctx.translate(t.x, t.y);
+      ctx.rotate(t.angle);
+
+      if (!drawAutoCroppedSprite(trafficSprite, t.width, t.height)) {
+        drawVectorCar(t.width, t.height, t.color, false);
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawPoliceUnits() {
+    const redFlash = Math.sin(sirenPhase) > 0;
+
+    for (let i = 0; i < policeUnits.length; i++) {
+      const cop = policeUnits[i];
+      ctx.save();
+      ctx.translate(cop.x, cop.y);
+      ctx.rotate(cop.angle);
+
+      if (!drawAutoCroppedSprite(policeSprite, cop.width, cop.height)) {
+        drawVectorCar(cop.width, cop.height, '#1e272e', true);
+      }
+
+      // Flash Red/Blue sirens when actively chasing; subtle standby amber/blue bar when patrolling
+      ctx.save();
+      if (cop.state === 'CHASE') {
+        const leftColor = redFlash ? 'rgba(255, 30, 50, 0.9)' : 'rgba(0, 140, 255, 0.9)';
+        const rightColor = redFlash ? 'rgba(0, 140, 255, 0.9)' : 'rgba(255, 30, 50, 0.9)';
+
+        ctx.fillStyle = leftColor;
+        ctx.shadowColor = leftColor;
+        ctx.shadowBlur = 22;
+        ctx.fillRect(-16, -6, 15, 8);
+
+        ctx.fillStyle = rightColor;
+        ctx.shadowColor = rightColor;
+        ctx.shadowBlur = 22;
+        ctx.fillRect(1, -6, 15, 8);
+
+        ctx.globalAlpha = 0.22;
+        ctx.beginPath();
+        ctx.arc(-20, 0, 55, 0, Math.PI * 2);
+        ctx.fillStyle = leftColor;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(20, 0, 55, 0, Math.PI * 2);
+        ctx.fillStyle = rightColor;
+        ctx.fill();
+      } else {
+        // Patrol mode lightbar (dim unlit bar)
+        ctx.fillStyle = 'rgba(0, 180, 255, 0.45)';
+        ctx.fillRect(-15, -5, 30, 6);
+      }
+      ctx.restore();
+
+      ctx.restore();
+    }
+  }
+
+  function drawPlayerCar() {
+    if (car.bustedTimer > 0.02) {
+      const pct = Math.min(1, car.bustedTimer / BUSTED_DURATION);
+      ctx.save();
+      ctx.translate(car.x, car.y);
+      ctx.beginPath();
+      ctx.arc(0, 0, 74, -Math.PI / 2, -Math.PI / 2 + pct * Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 71, 87, 0.75)';
+      ctx.lineWidth = 5;
+      ctx.shadowColor = '#ff4757';
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.translate(car.x, car.y);
+    ctx.rotate(car.angle);
+
+    const activeSprite = playerCarSprites[car.selectedPreset];
+    const presetColor = CAR_PRESETS[car.selectedPreset].color;
+
+    if (!drawAutoCroppedSprite(activeSprite, car.width, car.height)) {
+      drawVectorCar(car.width, car.height, presetColor, false, true);
+    }
+
+    ctx.restore();
+  }
+
+  function drawVectorCar(w, h, bodyColor, isPolice = false, isPlayer = false) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.fillRect(-w / 2 + 5, -h / 2 + 5, w, h);
+
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.roundRect(-w / 2, -h / 2, w, h, 10);
+    ctx.fill();
+
+    if (isPolice) {
+      ctx.fillStyle = '#f5f6fa';
+      ctx.fillRect(-w / 2 + 2, -h / 5, w - 4, h * 0.4);
+    } else if (isPlayer) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+      ctx.fillRect(-5, -h / 2 + 2, 10, h - 4);
+    }
+
+    ctx.fillStyle = '#1e272e';
+    ctx.fillRect(-w / 2 + 7, -h / 4, w - 14, h / 2);
+
+    ctx.fillStyle = '#fff200';
+    ctx.fillRect(-w / 2 + 6, -h / 2, 11, 4);
+    ctx.fillRect(w / 2 - 17, -h / 2, 11, 4);
+
+    ctx.fillStyle = (isPlayer && (keys.down || keys.space)) ? '#ff1e1e' : '#800000';
+    ctx.fillRect(-w / 2 + 6, h / 2 - 4, 12, 4);
+    ctx.fillRect(w / 2 - 18, h / 2 - 4, 12, 4);
+  }
+
+  function drawBuildings() {
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      if (
+        b.x + b.width < camera.x ||
+        b.x > camera.x + canvas.width ||
+        b.y + b.height < camera.y ||
+        b.y > camera.y + canvas.height
+      ) {
+        continue;
+      }
+
+      const spriteObj = buildingSprites[b.variant];
+      if (spriteObj.loaded && spriteObj.crop) {
+        ctx.drawImage(
+          spriteObj.img,
+          spriteObj.crop.sx, spriteObj.crop.sy, spriteObj.crop.sw, spriteObj.crop.sh,
+          b.x, b.y, b.width, b.height
+        );
+      } else {
+        ctx.save();
+        ctx.fillStyle = '#141821';
+        ctx.fillRect(b.x, b.y, b.width, b.height);
+        ctx.strokeStyle = b.neonColor;
+        ctx.lineWidth = 4;
+        ctx.shadowColor = b.neonColor;
+        ctx.shadowBlur = 14;
+        ctx.strokeRect(b.x + 2, b.y + 2, b.width - 4, b.height - 4);
+        ctx.restore();
+      }
+    }
+  }
+
+  function drawDeliveryZone() {
+    const isPickup = mission.state === 'PICKUP';
+    const mainColor = isPickup ? '#00f2fe' : '#ff007f';
+    const fillRgba = isPickup ? 'rgba(0, 242, 254, 0.18)' : 'rgba(255, 0, 127, 0.18)';
+    const pulseRadius = mission.radius + Math.sin(mission.pulsePhase) * 9;
+
+    ctx.save();
+    ctx.translate(mission.targetX, mission.targetY);
+
+    ctx.beginPath();
+    ctx.arc(0, 0, pulseRadius, 0, Math.PI * 2);
+    ctx.fillStyle = fillRgba;
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = mainColor;
+    ctx.shadowColor = mainColor;
+    ctx.shadowBlur = 22;
+    ctx.stroke();
+
+    ctx.rotate(mission.pulsePhase * 0.35);
+    ctx.beginPath();
+    ctx.setLineDash([16, 12]);
+    ctx.arc(0, 0, mission.radius * 0.62, 0, Math.PI * 2);
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.rotate(-mission.pulsePhase * 0.35);
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 14px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(isPickup ? 'PICKUP' : 'DROP-OFF', 0, 5);
+
+    ctx.restore();
+  }
+
+  function drawSmokeParticles() {
+    ctx.save();
+    for (let i = 0; i < smokeParticles.length; i++) {
+      const p = smokeParticles[i];
+      const grad = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, p.radius);
+      grad.addColorStop(0, `rgba(215, 220, 230, ${p.alpha})`);
+      grad.addColorStop(1, 'rgba(215, 220, 230, 0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawNavigationArrow() {
+    const dx = mission.targetX - car.x;
+    const dy = mission.targetY - car.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < mission.radius + 50) return;
+
+    const angle = Math.atan2(dy, dx);
+    const orbitRadius = 92;
+    const arrowX = car.x + Math.cos(angle) * orbitRadius;
+    const arrowY = car.y + Math.sin(angle) * orbitRadius;
+    const color = mission.state === 'PICKUP' ? '#00f2fe' : '#ff007f';
+
+    ctx.save();
+    ctx.translate(arrowX, arrowY);
+    ctx.rotate(angle);
+
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.moveTo(18, 0);
+    ctx.lineTo(-10, -12);
+    ctx.lineTo(-4, 0);
+    ctx.lineTo(-10, 12);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.rotate(-angle);
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round(dist / 10)}m`, 0, 24);
+    ctx.restore();
+  }
+
+  function drawFloatingTexts() {
+    ctx.save();
+    for (let i = 0; i < floatingTexts.length; i++) {
+      const ft = floatingTexts[i];
+      ctx.save();
+      ctx.translate(ft.x, ft.y);
+      ctx.scale(ft.scale, ft.scale);
+      ctx.globalAlpha = Math.max(0, ft.alpha);
+      ctx.font = '900 24px "Segoe UI", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = ft.color;
+      ctx.fillText(ft.text, 0, 0);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function gameLoop(timestamp) {
+    updateGame(timestamp);
+    render();
+    requestAnimationFrame(gameLoop);
+  }
+
+  requestAnimationFrame(gameLoop);
+</script>
+
+</body>
+</html>
